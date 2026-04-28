@@ -56,10 +56,10 @@ brews:
     test: system "#{bin}/safeclone", "--help"
 
 scoops:
-  repository:
-    owner: altship-hq
-    name: scoop-safeclone
-    token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
-  homepage: https://github.com/altship-hq/safeclone
-  description: Scan a GitHub repo for threats before cloning
-  license: MIT
+  - repository:
+      owner: altship-hq
+      name: scoop-safeclone
+      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+    homepage: https://github.com/altship-hq/safeclone
+    description: Scan a GitHub repo for threats before cloning
+    license: MIT
