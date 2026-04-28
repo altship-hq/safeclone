@@ -1,0 +1,4 @@
+dist/
+*.db
+.env
+coverage.out

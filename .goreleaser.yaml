@@ -1,0 +1,65 @@
+version: 2
+
+project_name: safeclone
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: safeclone
+    main: ./cmd/safeclone
+    binary: safeclone
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - builds: [safeclone]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+brews:
+  - name: safeclone
+    repository:
+      owner: altship-hq
+      name: homebrew-safeclone
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/altship-hq/safeclone
+    description: Scan a GitHub repo for threats before cloning
+    license: MIT
+    install: bin.install "safeclone"
+    test: system "#{bin}/safeclone", "--help"
+
+scoop:
+  repository:
+    owner: altship-hq
+    name: scoop-safeclone
+    token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+  homepage: https://github.com/altship-hq/safeclone
+  description: Scan a GitHub repo for threats before cloning
+  license: MIT
