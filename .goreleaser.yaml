@@ -55,7 +55,7 @@ brews:
     install: bin.install "safeclone"
     test: system "#{bin}/safeclone", "--help"
 
-scoop:
+scoops:
   repository:
     owner: altship-hq
     name: scoop-safeclone
