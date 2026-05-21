@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/altship-hq/safeclone/internal/report"
@@ -15,6 +16,7 @@ type Scan struct {
 	URL       string
 	Status    string
 	Report    *report.Report
+	Logs      []string
 	CreatedAt time.Time
 }
 
@@ -45,11 +47,17 @@ func (d *DB) migrate() error {
 			status     TEXT NOT NULL DEFAULT 'pending',
 			report     TEXT,
 			error      TEXT,
+			logs       TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_scans_url ON scans(url);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	// Add logs column to existing databases that predate this migration.
+	_, _ = d.conn.Exec(`ALTER TABLE scans ADD COLUMN logs TEXT`)
+	return nil
 }
 
 // CreateScan inserts a new scan row with pending status.
@@ -74,16 +82,25 @@ func (d *DB) SaveReport(id string, rep *report.Report) error {
 	return err
 }
 
+// AppendLog appends a single log line to the scan's log buffer.
+func (d *DB) AppendLog(id, line string) error {
+	_, err := d.conn.Exec(`
+		UPDATE scans SET logs = CASE WHEN logs IS NULL OR logs = ''
+			THEN ? ELSE logs || char(10) || ? END
+		WHERE id=?`, line, line, id)
+	return err
+}
+
 // GetScan fetches a scan by ID. Returns nil, nil if not found.
 func (d *DB) GetScan(id string) (*Scan, error) {
-	row := d.conn.QueryRow(`SELECT id, url, status, report, created_at FROM scans WHERE id=?`, id)
+	row := d.conn.QueryRow(`SELECT id, url, status, report, logs, created_at FROM scans WHERE id=?`, id)
 	return scanRow(row)
 }
 
 // GetCachedScan returns a completed scan for the given URL done within the last 6 hours.
 func (d *DB) GetCachedScan(url string) (*Scan, error) {
 	row := d.conn.QueryRow(`
-		SELECT id, url, status, report, created_at FROM scans
+		SELECT id, url, status, report, logs, created_at FROM scans
 		WHERE url=? AND status='done' AND created_at >= datetime('now', '-6 hours')
 		ORDER BY created_at DESC LIMIT 1
 	`, url)
@@ -93,9 +110,10 @@ func (d *DB) GetCachedScan(url string) (*Scan, error) {
 func scanRow(row *sql.Row) (*Scan, error) {
 	var s Scan
 	var reportJSON sql.NullString
+	var logsRaw sql.NullString
 	var createdAt string
 
-	err := row.Scan(&s.ID, &s.URL, &s.Status, &reportJSON, &createdAt)
+	err := row.Scan(&s.ID, &s.URL, &s.Status, &reportJSON, &logsRaw, &createdAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -112,6 +130,11 @@ func scanRow(row *sql.Row) (*Scan, error) {
 		}
 		s.Report = &rep
 	}
+
+	if logsRaw.Valid && logsRaw.String != "" {
+		s.Logs = strings.Split(logsRaw.String, "\n")
+	}
+
 	return &s, nil
 }
 

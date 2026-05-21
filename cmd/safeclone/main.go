@@ -105,6 +105,8 @@ func postScan(url string) (string, bool, error) {
 }
 
 func pollReport(jobID string) (*report.Report, error) {
+	printed := 0
+	dim := color.New(color.Faint)
 	for {
 		time.Sleep(2 * time.Second)
 		resp, err := http.Get(apiBase() + "/report/" + jobID)
@@ -114,9 +116,15 @@ func pollReport(jobID string) (*report.Report, error) {
 		var result struct {
 			Status string         `json:"status"`
 			Report *report.Report `json:"report"`
+			Logs   []string       `json:"logs"`
 		}
 		json.NewDecoder(resp.Body).Decode(&result)
 		resp.Body.Close()
+
+		for i := printed; i < len(result.Logs); i++ {
+			dim.Println("  " + result.Logs[i])
+		}
+		printed = len(result.Logs)
 
 		switch result.Status {
 		case "done":

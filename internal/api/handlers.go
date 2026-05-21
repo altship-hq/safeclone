@@ -59,7 +59,7 @@ func (s *Server) handleReport(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "scan not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": scan.Status, "report": scan.Report})
+	c.JSON(http.StatusOK, gin.H{"status": scan.Status, "report": scan.Report, "logs": scan.Logs})
 }
 
 func (s *Server) handleHealth(c *gin.Context) {

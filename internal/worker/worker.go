@@ -49,7 +49,10 @@ func (h *ScanHandler) ProcessTask(ctx context.Context, task *asynq.Task) error {
 		return err
 	}
 
-	rep, err := h.runner.Run(ctx, payload.URL)
+	logFn := func(line string) {
+		_ = h.db.AppendLog(payload.JobID, line)
+	}
+	rep, err := h.runner.Run(ctx, payload.URL, logFn)
 	if err != nil {
 		log.Printf("scan failed for job %s url %s: %v", payload.JobID, payload.URL, err)
 		_ = h.db.UpdateStatus(payload.JobID, "failed")

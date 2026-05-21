@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 
@@ -27,16 +28,20 @@ func NewRunner() (*Runner, error) {
 }
 
 // Run clones a repo in a sandbox, runs all scanners concurrently, and returns the report.
-func (r *Runner) Run(ctx context.Context, url string) (*report.Report, error) {
+// logFn is called with progress messages as the scan proceeds.
+func (r *Runner) Run(ctx context.Context, url string, logFn func(string)) (*report.Report, error) {
 	tmpDir, err := os.MkdirTemp("", "safeclone-*")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(tmpDir)
 
+	logFn("Cloning repository...")
 	if err := r.cloneInSandbox(ctx, url, tmpDir); err != nil {
 		return nil, err
 	}
+	logFn("Repository cloned")
+	logFn("Running 3 scanners in parallel...")
 
 	var (
 		wg      sync.WaitGroup
@@ -49,34 +54,42 @@ func (r *Runner) Run(ctx context.Context, url string) (*report.Report, error) {
 
 	go func() {
 		defer wg.Done()
+		logFn("  → Secrets scanner started")
 		secrets, err := scanner.ScanSecrets(ctx, tmpDir)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
 			lastErr = err
+			logFn("  ✗ Secrets scanner failed")
 			return
 		}
 		rep.Secrets = secrets
+		logFn(fmt.Sprintf("  ✓ Secrets scan complete (%d found)", len(secrets)))
 	}()
 
 	go func() {
 		defer wg.Done()
+		logFn("  → Dependency scanner started")
 		vulns, err := scanner.ScanDependencies(tmpDir)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
 			lastErr = err
+			logFn("  ✗ Dependency scanner failed")
 			return
 		}
 		rep.Vulns = vulns
+		logFn(fmt.Sprintf("  ✓ Dependency scan complete (%d vulnerable packages found)", len(vulns)))
 	}()
 
 	go func() {
 		defer wg.Done()
+		logFn("  → Scripts scanner started")
 		scripts := scanner.ScanScripts(tmpDir)
 		mu.Lock()
 		defer mu.Unlock()
 		rep.Scripts = scripts
+		logFn(fmt.Sprintf("  ✓ Scripts scan complete (%d issues found)", len(scripts)))
 	}()
 
 	wg.Wait()
