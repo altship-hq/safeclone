@@ -1,0 +1,46 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build server (linux/arm64)
+        run: |
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 \
+          go build -ldflags="-s -w" -o safeclone-server ./cmd/server
+
+      - name: Deploy to VPS
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          echo "$SSH_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+          scp -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            safeclone-server root@178.105.49.182:/tmp/safeclone-server
+
+          ssh -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            root@178.105.49.182 "
+              systemctl stop safeclone && \
+              mv /tmp/safeclone-server /usr/local/bin/safeclone-server && \
+              chmod +x /usr/local/bin/safeclone-server && \
+              systemctl start safeclone
+            "
+
+          rm -f /tmp/deploy_key
