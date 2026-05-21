@@ -4,9 +4,20 @@ SafeClone is a CLI security tool that scans GitHub repositories for threats — 
 
 ## Install
 
+**macOS / Linux (Homebrew)**
 ```bash
-curl -sSL https://safeclone.dev/install.sh | sh
+brew install altship-hq/safeclone/safeclone
 ```
+
+**Windows (Scoop)**
+```bash
+scoop bucket add altship-hq https://github.com/altship-hq/scoop-safeclone
+scoop install safeclone
+```
+
+**Direct download**
+
+Download the latest binary for your platform from [GitHub Releases](https://github.com/altship-hq/safeclone/releases).
 
 ## Usage
 
@@ -21,31 +32,44 @@ safeclone https://github.com/some/repo --dir myproject
 safeclone https://github.com/some/repo --force
 ```
 
-## How the scanners work
+## What we scan for
 
-**Secrets scanner** — runs [TruffleHog](https://github.com/trufflesecurity/trufflehog) against the cloned repository filesystem to detect hardcoded API keys, tokens, and credentials.
+**Secrets** — runs [TruffleHog](https://github.com/trufflesecurity/trufflehog) against the cloned repository filesystem to detect hardcoded API keys, tokens, and credentials. Only verified, active secrets are reported.
 
-**Dependencies scanner** — reads `package.json` (npm) and `requirements.txt` (PyPI), then queries the [OSV.dev](https://osv.dev) batch API for known CVEs against each package.
+**Vulnerable dependencies** — checks packages against the [OSV.dev](https://osv.dev) database with exact version pinning. Covers 10 ecosystems:
 
-**Scripts scanner** — inspects install-time hook fields (`preinstall`, `install`, `postinstall` in `package.json`, plus `setup.py`, `setup.cfg`, `install.sh`, `Makefile`) for dangerous patterns such as remote downloads, dynamic code execution, and obfuscated content.
+| Ecosystem | File |
+|---|---|
+| npm | `package.json` |
+| PyPI | `requirements.txt` |
+| Go | `go.mod` |
+| Cargo | `Cargo.toml` |
+| Maven | `pom.xml` |
+| RubyGems | `Gemfile.lock` |
+| Packagist | `composer.json` |
+| NuGet | `packages.config` / `*.csproj` |
+| Pub | `pubspec.yaml` |
+| Hex | `mix.exs` |
+
+**Dangerous scripts** — inspects install-time hooks (`preinstall`, `postinstall` in `package.json`, `setup.py`) for patterns like remote downloads, `eval`, `base64`, and environment variable exfiltration.
 
 ## Self-hosting
 
 ```bash
 # Requirements: Go 1.22+, Redis, Docker
 
-# Clone this repo and build
-git clone https://github.com/user/safeclone
+# Clone and build
+git clone https://github.com/altship-hq/safeclone
 cd safeclone
 make build-server
 
 # Build the scanner Docker image
 make docker
 
-# Copy .env.example and set your values
+# Configure environment
 cp .env.example .env
 
-# Run server (requires Redis on REDIS_ADDR)
+# Run (requires Redis on REDIS_ADDR)
 ./dist/safeclone-server-linux-amd64
 ```
 
