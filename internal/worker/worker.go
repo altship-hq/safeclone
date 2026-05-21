@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/hibiken/asynq"
 	"github.com/altship-hq/safeclone/internal/db"
@@ -50,6 +51,7 @@ func (h *ScanHandler) ProcessTask(ctx context.Context, task *asynq.Task) error {
 
 	rep, err := h.runner.Run(ctx, payload.URL)
 	if err != nil {
+		log.Printf("scan failed for job %s url %s: %v", payload.JobID, payload.URL, err)
 		_ = h.db.UpdateStatus(payload.JobID, "failed")
 		return err
 	}
