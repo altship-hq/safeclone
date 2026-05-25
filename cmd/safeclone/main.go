@@ -164,6 +164,15 @@ func printReport(rep *report.Report) {
 		color.Green("  ✓ No dangerous scripts")
 	}
 
+	if len(rep.MarkdownIssues) > 0 {
+		color.Yellow("Suspicious markdown files:")
+		for _, m := range rep.MarkdownIssues {
+			color.Yellow("  [%s] %s — %s", m.Severity, m.Reason, m.File)
+		}
+	} else {
+		color.Green("  ✓ No suspicious markdown")
+	}
+
 	fmt.Println()
 	switch rep.Verdict {
 	case "safe":

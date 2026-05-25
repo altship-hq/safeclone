@@ -50,7 +50,7 @@ func (r *Runner) Run(ctx context.Context, url string, logFn func(string)) (*repo
 		lastErr error
 	)
 
-	wg.Add(3)
+	wg.Add(4)
 
 	go func() {
 		defer wg.Done()
@@ -90,6 +90,16 @@ func (r *Runner) Run(ctx context.Context, url string, logFn func(string)) (*repo
 		defer mu.Unlock()
 		rep.Scripts = scripts
 		logFn(fmt.Sprintf("  ✓ Scripts scan complete (%d issues found)", len(scripts)))
+	}()
+
+	go func() {
+		defer wg.Done()
+		logFn("  → Markdown scanner started")
+		mdIssues := scanner.ScanMarkdown(tmpDir)
+		mu.Lock()
+		defer mu.Unlock()
+		rep.MarkdownIssues = mdIssues
+		logFn(fmt.Sprintf("  ✓ Markdown scan complete (%d issues found)", len(mdIssues)))
 	}()
 
 	wg.Wait()

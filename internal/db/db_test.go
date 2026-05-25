@@ -94,6 +94,29 @@ func TestGetScan_notFound(t *testing.T) {
 	}
 }
 
+func TestAppendLog(t *testing.T) {
+	d := newTestDB(t)
+	d.CreateScan("id-log", "https://github.com/foo/bar")
+
+	if err := d.AppendLog("id-log", "Cloning repository..."); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.AppendLog("id-log", "  → Secrets scanner started"); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := d.GetScan("id-log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Logs) != 2 {
+		t.Fatalf("expected 2 log lines, got %d", len(s.Logs))
+	}
+	if s.Logs[0] != "Cloning repository..." {
+		t.Errorf("unexpected first log line: %s", s.Logs[0])
+	}
+}
+
 func TestGetCachedScan(t *testing.T) {
 	d := newTestDB(t)
 	url := "https://github.com/foo/bar"
