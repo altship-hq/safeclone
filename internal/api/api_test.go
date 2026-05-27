@@ -91,7 +91,7 @@ func TestHandleScan_cached(t *testing.T) {
 	r, database := setupTestServer(t)
 
 	url := "https://github.com/foo/cached"
-	_ = database.CreateScan("cached-id", url)
+	_ = database.CreateScan("cached-id", url, "abc123")
 	rep := &struct{ Verdict string }{Verdict: "safe"}
 	_ = database
 	// save a done scan so cache hits

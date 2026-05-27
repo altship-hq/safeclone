@@ -27,7 +27,7 @@ func newTestDB(t *testing.T) *DB {
 
 func TestCreateScan(t *testing.T) {
 	d := newTestDB(t)
-	if err := d.CreateScan("id1", "https://github.com/foo/bar"); err != nil {
+	if err := d.CreateScan("id1", "https://github.com/foo/bar", "abc123"); err != nil {
 		t.Fatal(err)
 	}
 	s, err := d.GetScan("id1")
@@ -44,7 +44,7 @@ func TestCreateScan(t *testing.T) {
 
 func TestUpdateStatus(t *testing.T) {
 	d := newTestDB(t)
-	d.CreateScan("id2", "https://github.com/foo/bar")
+	d.CreateScan("id2", "https://github.com/foo/bar", "")
 	if err := d.UpdateStatus("id2", "scanning"); err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestUpdateStatus(t *testing.T) {
 
 func TestSaveAndGetReport(t *testing.T) {
 	d := newTestDB(t)
-	d.CreateScan("id3", "https://github.com/foo/bar")
+	d.CreateScan("id3", "https://github.com/foo/bar", "")
 
 	rep := &report.Report{
 		Secrets: []report.Secret{{File: "config.go", Detector: "AWS", Severity: "high"}},
@@ -96,7 +96,7 @@ func TestGetScan_notFound(t *testing.T) {
 
 func TestAppendLog(t *testing.T) {
 	d := newTestDB(t)
-	d.CreateScan("id-log", "https://github.com/foo/bar")
+	d.CreateScan("id-log", "https://github.com/foo/bar", "")
 
 	if err := d.AppendLog("id-log", "Cloning repository..."); err != nil {
 		t.Fatal(err)
@@ -120,12 +120,14 @@ func TestAppendLog(t *testing.T) {
 func TestGetCachedScan(t *testing.T) {
 	d := newTestDB(t)
 	url := "https://github.com/foo/bar"
-	d.CreateScan("old1", url)
-	// manually set old created_at
+	hash := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+
+	d.CreateScan("old1", url, hash)
+	// manually set old created_at so it falls outside the 6-hour window
 	d.conn.Exec(`UPDATE scans SET created_at=?, status='done', report='{"verdict":"safe"}' WHERE id='old1'`,
 		time.Now().UTC().Add(-8*time.Hour).Format("2006-01-02 15:04:05"))
 
-	s, err := d.GetCachedScan(url)
+	s, err := d.GetCachedScan(url, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,16 +135,25 @@ func TestGetCachedScan(t *testing.T) {
 		t.Error("expected nil for scan older than 6 hours")
 	}
 
-	// recent scan
-	d.CreateScan("new1", url)
+	// recent scan with same commit hash — should be a cache hit
+	d.CreateScan("new1", url, hash)
 	rep := &report.Report{Verdict: "safe"}
 	d.SaveReport("new1", rep)
 
-	s, err = d.GetCachedScan(url)
+	s, err = d.GetCachedScan(url, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if s == nil {
-		t.Error("expected cached scan for recent entry")
+		t.Error("expected cached scan for recent entry with matching hash")
+	}
+
+	// different commit hash — should be a cache miss
+	s, err = d.GetCachedScan(url, "differenthash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s != nil {
+		t.Error("expected nil for scan with different commit hash")
 	}
 }
