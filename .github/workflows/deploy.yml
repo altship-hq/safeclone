@@ -38,8 +38,8 @@ jobs:
             -o StrictHostKeyChecking=no \
             root@178.105.49.182 "
               systemctl stop safeclone && \
-              mv /tmp/safeclone-server /usr/local/bin/safeclone-server && \
-              chmod +x /usr/local/bin/safeclone-server && \
+              mv /tmp/safeclone-server /opt/safeclone/safeclone-server && \
+              chmod +x /opt/safeclone/safeclone-server && \
               systemctl start safeclone
             "
 
