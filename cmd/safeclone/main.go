@@ -60,8 +60,6 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	if cached {
 		color.New(color.Faint).Println("using cached result")
-	} else {
-		fmt.Println("scanning in sandbox (~30-60s)")
 	}
 
 	rep, err := pollReport(jobID)
@@ -104,13 +102,60 @@ func postScan(url string) (string, bool, error) {
 	return result.JobID, result.Cached, nil
 }
 
+// spinnerHandle manages an animated braille spinner goroutine.
+type spinnerHandle struct {
+	stopCh chan struct{}
+	doneCh chan struct{}
+}
+
+func startSpinner(msg string) *spinnerHandle {
+	h := &spinnerHandle{
+		stopCh: make(chan struct{}),
+		doneCh: make(chan struct{}),
+	}
+	go func() {
+		defer close(h.doneCh)
+		frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		i := 0
+		t := time.NewTicker(80 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-h.stopCh:
+				fmt.Print("\r\033[K") // clear the spinner line
+				return
+			case <-t.C:
+				fmt.Printf("\r  %s %s", frames[i%len(frames)], msg)
+				i++
+			}
+		}
+	}()
+	return h
+}
+
+func (h *spinnerHandle) stop() {
+	close(h.stopCh)
+	<-h.doneCh // wait until line is cleared before any further prints
+}
+
 func pollReport(jobID string) (*report.Report, error) {
 	printed := 0
 	dim := color.New(color.Faint)
+
+	var spin *spinnerHandle
+	stopSpin := func() {
+		if spin != nil {
+			spin.stop()
+			spin = nil
+		}
+	}
+
+	spin = startSpinner("scanning in sandbox...")
+
 	for {
-		time.Sleep(2 * time.Second)
 		resp, err := http.Get(apiBase() + "/report/" + jobID)
 		if err != nil {
+			stopSpin()
 			return nil, err
 		}
 		var result struct {
@@ -121,17 +166,29 @@ func pollReport(jobID string) (*report.Report, error) {
 		json.NewDecoder(resp.Body).Decode(&result)
 		resp.Body.Close()
 
-		for i := printed; i < len(result.Logs); i++ {
-			dim.Println("  " + result.Logs[i])
+		// Print any new log lines (stops + restarts spinner around them).
+		if len(result.Logs) > printed {
+			stopSpin()
+			for i := printed; i < len(result.Logs); i++ {
+				dim.Println("  " + result.Logs[i])
+			}
+			printed = len(result.Logs)
 		}
-		printed = len(result.Logs)
 
 		switch result.Status {
 		case "done":
+			stopSpin()
 			return result.Report, nil
 		case "failed":
+			stopSpin()
 			return nil, fmt.Errorf("scan failed on server")
 		}
+
+		// Restart spinner between polls if it was stopped for log output.
+		if spin == nil {
+			spin = startSpinner("scanning in sandbox...")
+		}
+		time.Sleep(2 * time.Second)
 	}
 }
 

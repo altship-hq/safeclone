@@ -42,27 +42,29 @@ func New(path string) (*DB, error) {
 func (d *DB) migrate() error {
 	_, err := d.conn.Exec(`
 		CREATE TABLE IF NOT EXISTS scans (
-			id         TEXT PRIMARY KEY,
-			url        TEXT NOT NULL,
-			status     TEXT NOT NULL DEFAULT 'pending',
-			report     TEXT,
-			error      TEXT,
-			logs       TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			id          TEXT PRIMARY KEY,
+			url         TEXT NOT NULL,
+			status      TEXT NOT NULL DEFAULT 'pending',
+			report      TEXT,
+			error       TEXT,
+			logs        TEXT,
+			commit_hash TEXT NOT NULL DEFAULT '',
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 		CREATE INDEX IF NOT EXISTS idx_scans_url ON scans(url);
 	`)
 	if err != nil {
 		return err
 	}
-	// Add logs column to existing databases that predate this migration.
+	// Add columns to existing databases that predate these migrations.
 	_, _ = d.conn.Exec(`ALTER TABLE scans ADD COLUMN logs TEXT`)
+	_, _ = d.conn.Exec(`ALTER TABLE scans ADD COLUMN commit_hash TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
 // CreateScan inserts a new scan row with pending status.
-func (d *DB) CreateScan(id, url string) error {
-	_, err := d.conn.Exec(`INSERT INTO scans (id, url) VALUES (?, ?)`, id, url)
+func (d *DB) CreateScan(id, url, commitHash string) error {
+	_, err := d.conn.Exec(`INSERT INTO scans (id, url, commit_hash) VALUES (?, ?, ?)`, id, url, commitHash)
 	return err
 }
 
@@ -97,13 +99,14 @@ func (d *DB) GetScan(id string) (*Scan, error) {
 	return scanRow(row)
 }
 
-// GetCachedScan returns a completed scan for the given URL done within the last 6 hours.
-func (d *DB) GetCachedScan(url string) (*Scan, error) {
+// GetCachedScan returns a completed scan for the given URL + commit hash done within the last 6 hours.
+// Pass a non-empty commitHash to get an exact cache hit keyed to that repo state.
+func (d *DB) GetCachedScan(url, commitHash string) (*Scan, error) {
 	row := d.conn.QueryRow(`
 		SELECT id, url, status, report, logs, created_at FROM scans
-		WHERE url=? AND status='done' AND created_at >= datetime('now', '-6 hours')
+		WHERE url=? AND commit_hash=? AND status='done' AND created_at >= datetime('now', '-6 hours')
 		ORDER BY created_at DESC LIMIT 1
-	`, url)
+	`, url, commitHash)
 	return scanRow(row)
 }
 
